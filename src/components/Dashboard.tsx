@@ -32,46 +32,59 @@ export default function Dashboard({
     message: ''
   });
 
-  // 1. Calculate General KPI Metrics
-  const totalClients = clients.length;
-  const pendingVisits = visits.filter(v => v.status === 'scheduled');
+  // 1. Calculate General KPI Metrics with absolute safety guarding
+  const safeClients = Array.isArray(clients) ? clients.filter(Boolean) : [];
+  const safeSales = Array.isArray(sales) ? sales.filter(Boolean) : [];
+  const safeVisits = Array.isArray(visits) ? visits.filter(Boolean) : [];
+
+  const totalClients = safeClients.length;
+  const pendingVisits = safeVisits.filter(v => v && v.status === 'scheduled');
   
   let totalRevenue = 0;
   let totalCost = 0;
   let totalWeightMagnus = 0;
 
-  sales.forEach(sale => {
-    totalRevenue += sale.totalSale;
-    totalCost += sale.totalCost;
-    sale.items.forEach(item => {
-      if (item.isMagnus) {
-        totalWeightMagnus += (item.weightKg * item.quantity);
-      }
-    });
+  safeSales.forEach(sale => {
+    if (!sale) return;
+    totalRevenue += Number(sale.totalSale) || 0;
+    totalCost += Number(sale.totalCost) || 0;
+    if (Array.isArray(sale.items)) {
+      sale.items.forEach(item => {
+        if (!item) return;
+        if (item.isMagnus) {
+          totalWeightMagnus += ((Number(item.weightKg) || 0) * (Number(item.quantity) || 0));
+        }
+      });
+    }
   });
 
   const totalNetProfit = totalRevenue - totalCost;
   const avgProfitPercentage = totalRevenue > 0 ? (totalNetProfit / totalRevenue) * 100 : 0;
 
   // 2. Prepare Recharts Chart Data: Sales timeline
-  // Group sales by Date (sorted chronological)
   const salesByDate: { [key: string]: { date: string; Revenue: number; Cost: number; Profit: number } } = {};
   
   // Last 10 sales in chronological order for the trend chart
-  const chronSales = [...sales].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(-10);
+  const chronSales = [...safeSales].sort((a, b) => {
+    const timeA = a?.date ? new Date(a.date).getTime() : 0;
+    const timeB = b?.date ? new Date(b.date).getTime() : 0;
+    return timeA - timeB;
+  }).slice(-10);
   
   chronSales.forEach(sale => {
-    const formattedDate = sale.date.split('-').reverse().slice(0, 2).join('/'); // DD/MM format
+    if (!sale) return;
+    const saleDateStr = sale.date || new Date().toISOString().split('T')[0];
+    const formattedDate = saleDateStr.split('-').reverse().slice(0, 2).join('/'); // DD/MM format
     if (salesByDate[formattedDate]) {
-      salesByDate[formattedDate].Revenue += sale.totalSale;
-      salesByDate[formattedDate].Cost += sale.totalCost;
-      salesByDate[formattedDate].Profit += sale.profit;
+      salesByDate[formattedDate].Revenue += Number(sale.totalSale) || 0;
+      salesByDate[formattedDate].Cost += Number(sale.totalCost) || 0;
+      salesByDate[formattedDate].Profit += Number(sale.profit) || 0;
     } else {
       salesByDate[formattedDate] = {
         date: formattedDate,
-        Revenue: sale.totalSale,
-        Cost: sale.totalCost,
-        Profit: sale.profit
+        Revenue: Number(sale.totalSale) || 0,
+        Cost: Number(sale.totalCost) || 0,
+        Profit: Number(sale.profit) || 0
       };
     }
   });
@@ -88,10 +101,13 @@ export default function Dashboard({
 
   // 3. Prepare Recharts Bar Chart: Sales distribution by Magnus categories
   const categorySummary: { [key: string]: number } = { Cães: 0, Gatos: 0, Outros: 0 };
-  sales.forEach(sale => {
+  safeSales.forEach(sale => {
+    if (!sale || !Array.isArray(sale.items)) return;
     sale.items.forEach(it => {
-      const cat = it.productName.toLowerCase().includes('gato') || it.productName.toLowerCase().includes('cat') ? 'Gatos' : 'Cães';
-      categorySummary[cat] += (it.weightKg * it.quantity);
+      if (!it) return;
+      const prodName = it.productName || '';
+      const cat = prodName.toLowerCase().includes('gato') || prodName.toLowerCase().includes('cat') ? 'Gatos' : 'Cães';
+      categorySummary[cat] = (categorySummary[cat] || 0) + ((Number(it.weightKg) || 0) * (Number(it.quantity) || 0));
     });
   });
 
@@ -102,7 +118,11 @@ export default function Dashboard({
   ];
 
   // 4. Upcoming schedules list
-  const nextVisits = [...pendingVisits].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 3);
+  const nextVisits = [...pendingVisits].sort((a, b) => {
+    const timeA = a?.date ? new Date(a.date).getTime() : 0;
+    const timeB = b?.date ? new Date(b.date).getTime() : 0;
+    return timeA - timeB;
+  }).slice(0, 3);
 
   // 5. Handle Import Backup Trigger
   const handleImportFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -136,36 +156,11 @@ export default function Dashboard({
   return (
     <div className="space-y-6">
       {/* Title greeting panel */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-6 bg-slate-900 rounded-2xl text-white shadow-xs gap-4 text-left relative overflow-hidden">
-        <div className="space-y-1 relative z-10">
-          <span className="p-1 px-2.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold uppercase rounded-full tracking-widest border border-emerald-500/30">Representante Magnus</span>
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight font-sans">Painel ClientsProEdvan</h1>
-          <p className="text-slate-300 text-xs sm:text-sm">Controle de faturamento de rações, agendamento de compras e rota de visitas comerciais.</p>
-        </div>
-        <div className="flex gap-2.5 z-10 w-full sm:w-auto shrink-0 mt-2 sm:mt-0 font-sans">
-          <button
-            onClick={exportData}
-            className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-slate-700/60"
-            title="Download de Backup de Clientes e Vendas"
-          >
-            <Download className="w-3.5 h-3.5" /> Exportar Dados
-          </button>
-          
-          <button
-            onClick={triggerFileInput}
-            className="flex-1 sm:flex-initial px-3.5 py-2 bg-slate-800 hover:bg-slate-755 text-slate-200 hover:text-white rounded-lg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all border border-slate-700/60"
-            title="Restaurar Banco de Dados Local"
-          >
-            <Upload className="w-3.5 h-3.5" /> Importar Backup
-          </button>
-          
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleImportFileChange}
-            accept=".json"
-            className="hidden"
-          />
+      <div className="p-6 bg-slate-905 rounded-2xl text-white shadow-md relative overflow-hidden text-left bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800">
+        <div className="space-y-2 relative z-10 max-w-2xl">
+          <span className="inline-block px-2.5 py-0.5 bg-emerald-500/20 text-emerald-300 text-[10px] font-extrabold uppercase rounded-full tracking-wider border border-emerald-500/30">Representante Magnus</span>
+          <h1 className="text-2xl sm:text-3xl font-black tracking-tight font-sans text-white">Painel ClientsProEdvan</h1>
+          <p className="text-slate-350 text-xs sm:text-sm leading-relaxed">Controle de faturamento de rações, agendamento de compras e rota de visitas comerciais com máxima praticidade.</p>
         </div>
 
         {/* Ambient background glows - hidden on mobile to prevent slow GPU compositing/ghosting glitches */}
@@ -410,6 +405,45 @@ export default function Dashboard({
         </div>
 
       </div>
+
+      {/* Central de Segurança e Backup dos Dados Local */}
+      <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm text-left">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h3 className="font-bold text-slate-850 text-xs sm:text-sm uppercase tracking-wider flex items-center gap-1.5">
+              <span>🛡️</span> Central de Segurança & Backups
+            </h3>
+            <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+              Todos os seus registros comerciais estão armazenados com segurança local no seu smartphone ou computador. Faça downloads preventivos de segurança com frequência.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:flex gap-2.5 w-full sm:w-auto shrink-0 font-sans">
+            <button
+              onClick={exportData}
+              className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-xs cursor-pointer"
+              title="Download de Backup de Clientes e Vendas"
+            >
+              <Download className="w-4 h-4 text-white" /> Exportar Dados
+            </button>
+            
+            <button
+              onClick={triggerFileInput}
+              className="px-3.5 py-2.5 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 hover:text-slate-900 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer border border-slate-200-30"
+              title="Restaurar Banco de Dados Local"
+            >
+              <Upload className="w-4 h-4 text-slate-650" /> Importar Backup
+            </button>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleImportFileChange}
+              accept=".json"
+              className="hidden"
+            />
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

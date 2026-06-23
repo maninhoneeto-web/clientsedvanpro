@@ -157,7 +157,24 @@ export default function Clients({
       return;
     }
     const textParam = messageText ? `&text=${encodeURIComponent(messageText)}` : '';
-    window.open(`https://api.whatsapp.com/send?phone=${sanitized}${textParam}`, '_blank');
+    const targetUrl = `https://api.whatsapp.com/send?phone=${sanitized}${textParam}`;
+
+    try {
+      const safeLink = document.createElement('a');
+      safeLink.href = targetUrl;
+      safeLink.target = '_blank';
+      safeLink.rel = 'noopener noreferrer';
+      document.body.appendChild(safeLink);
+      safeLink.click();
+      document.body.removeChild(safeLink);
+    } catch (sandboxError) {
+      console.warn("Iframe popup block caught in Clients. Launching fallback:", sandboxError);
+      try {
+        window.open(targetUrl, '_blank');
+      } catch (e) {
+        console.error("Unable to open WhatsApp from clients list in sandwich container:", e);
+      }
+    }
   };
 
   return (
@@ -568,8 +585,23 @@ const handleShareOnWhatsApp = (client: Client, sale: Sale) => {
     `_ClientsProEdvan_`;
 
   const encodedText = encodeURIComponent(message);
-  const formattedPhone = client.phone.replace(/\D/g, '');
+  const formattedPhone = client.phone ? client.phone.replace(/\D/g, '') : '';
   const waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`;
 
-  window.open(waUrl, '_blank');
+  try {
+    const safeLink = document.createElement('a');
+    safeLink.href = waUrl;
+    safeLink.target = '_blank';
+    safeLink.rel = 'noopener noreferrer';
+    document.body.appendChild(safeLink);
+    safeLink.click();
+    document.body.removeChild(safeLink);
+  } catch (sandboxError) {
+    console.warn("Iframe popup block caught in Share WhatsApp. Fallback direct window.open:", sandboxError);
+    try {
+      window.open(waUrl, '_blank');
+    } catch (e) {
+      console.error("Failed to trigger share backup flow in sandbox iframe:", e);
+    }
+  }
 };

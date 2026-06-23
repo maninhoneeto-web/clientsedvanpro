@@ -373,7 +373,23 @@ export default function Sales({
     const formattedPhone = clientPhone.replace(/\D/g, ''); // strip non-numeric
     const waUrl = `https://api.whatsapp.com/send?phone=${formattedPhone}&text=${encodedText}`;
 
-    window.open(waUrl, '_blank');
+    try {
+      // Use dynamic safe anchor element for maximum browser compliance inside iframes
+      const safeLink = document.createElement('a');
+      safeLink.href = waUrl;
+      safeLink.target = '_blank';
+      safeLink.rel = 'noopener noreferrer';
+      document.body.appendChild(safeLink);
+      safeLink.click();
+      document.body.removeChild(safeLink);
+    } catch (sandboxError) {
+      console.warn("Bloqueio de iframe capturado para WhatsApp. Tentando método direto de fallback:", sandboxError);
+      try {
+        window.open(waUrl, '_blank');
+      } catch (e) {
+        console.error("Incapaz de abrir popup de WhatsApp no sandbox:", e);
+      }
+    }
   };
 
   // Filter Sales list

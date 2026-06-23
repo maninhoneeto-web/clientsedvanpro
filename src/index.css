@@ -2,36 +2,22 @@
 
 /* Otimizações de Viewport, Toque e Renderização para Celular */
 html, body, #root {
-  background-color: #f8fafc; /* Cor sólida slate-50 fixa para evitar fantasmas ou scanlines de repetição gráfica */
+  background-color: #f8fafc;
   margin: 0;
   padding: 0;
   width: 100%;
   height: 100%;
-  overflow-x: hidden;
   -webkit-tap-highlight-color: transparent;
-  -webkit-overflow-scrolling: touch;
 }
 
-/* Evita que toque longo ou arrasto de botões, imagens e ícones duplique imagens na tela do celular */
-img, svg, button, a, [draggable] {
+/* Evita comportamento indesejado de arrastar imagens nativas */
+img {
   -webkit-user-drag: none;
-  -khtml-user-drag: none;
-  -moz-user-drag: none;
-  -o-user-drag: none;
-  user-drag: none;
-  -webkit-touch-callout: none; /* Desativa menu flutuante nativo ao segurar o dedo em imagens */
-  user-select: none;
+  -webkit-touch-callout: none;
 }
 
-/* Permite seleção de texto apenas em campos necessários */
+/* Garante seleção de texto amigável em inputs */
 input, textarea, select {
   user-select: text !important;
 }
 
-/* Suavidade e aceleração por hardware nos contêineres de rolagem */
-.mobile-smooth-scroll {
-  -webkit-overflow-scrolling: touch;
-  transform: translate3d(0, 0, 0); /* Força isolamento de camada no chip gráfico (GPU) */
-  backface-visibility: hidden;
-  will-change: transform;
-}

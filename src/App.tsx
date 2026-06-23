@@ -127,52 +127,15 @@ export default function App() {
           </div>
         </div>
 
-        <button
-          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-          className="p-1.5 text-slate-400 hover:text-white rounded-md hover:bg-slate-800 transition-all"
-        >
-          {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-        </button>
+        {/* Safe status badge directly on the header */}
+        <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-500/10 border border-emerald-500/25 rounded-xl">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="text-[9px] text-emerald-400 font-bold uppercase tracking-wider font-mono">Modo Local Seguro</span>
+        </div>
       </header>
 
-      {/* MOBILE DRAWER */}
-      <AnimatePresence>
-        {mobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="md:hidden bg-slate-900 border-b border-slate-800 absolute top-[52px] left-0 right-0 z-40 p-4 font-sans space-y-2 text-left"
-          >
-            {menuItems.map((item) => {
-              const Icon = item.icon;
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleNavigateToTab(item.id)}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
-                    isActive
-                      ? 'bg-emerald-600 text-white'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-slate-100'
-                  }`}
-                >
-                  <Icon className="w-4 h-4 shrink-0" />
-                  {item.label}
-                </button>
-              );
-            })}
-            
-            <div className="pt-3 border-t border-slate-800 px-2 flex items-center justify-between text-[10px] text-slate-500">
-              <span>🗄️ Modo Offline Ativo</span>
-              <span className="text-emerald-400 font-bold">100% SEGURO ✔</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* MAIN VIEWPORT CANVAS */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl mx-auto w-full mobile-smooth-scroll">
+      <main className="flex-1 p-4 pb-24 md:pb-8 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}
@@ -230,6 +193,28 @@ export default function App() {
           </motion.div>
         </AnimatePresence>
       </main>
+
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-slate-900 border-t border-slate-800 z-50 flex justify-around items-center py-2 px-1 pb-[calc(env(safe-area-inset-bottom)+8px)] shadow-2xl select-none">
+        {menuItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = activeTab === item.id;
+          return (
+            <button
+              key={item.id}
+              onClick={() => handleNavigateToTab(item.id)}
+              className={`flex flex-col items-center justify-center flex-1 py-1 gap-1 transition-all ${
+                isActive ? 'text-emerald-400 font-bold scale-105' : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              <Icon className={`w-5 h-5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+              <span className="text-[10px] font-semibold tracking-wide leading-none">
+                {item.id === 'dashboard' ? 'Painel' : item.id === 'clients' ? 'Clientes' : item.id === 'sales' ? 'Vendas' : 'Visitas'}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
 
     </div>
   );
