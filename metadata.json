@@ -1,0 +1,6 @@
+{
+  "name": "ClientsProEdvan",
+  "description": "Micro SaaS para representantes de rações agropecuárias (marca Magnus). Oferece controle de clientes, registro de vendas com peso (Kg), histórico de compras, agendamento de visitas, envio de comprovantes via WhatsApp e cálculo de lucros e margens.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
