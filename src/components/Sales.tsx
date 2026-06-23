@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Client, Sale, SaleItem, MagnusProductTemplate } from '../types';
 import { MAGNUS_PRODUCTS } from '../constants';
-import { Plus, Trash2, Share2, Calculator, Info, Search, HelpCircle, Check, DollarSign } from 'lucide-react';
+import { Plus, Trash2, Share2, Calculator, Info, Search, HelpCircle, Check, DollarSign, Mic, Image, Sparkles, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface SalesProps {
   clients: Client[];
@@ -32,6 +32,181 @@ export default function Sales({
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [saleNotes, setSaleNotes] = useState('');
   const [currentItems, setCurrentItems] = useState<Omit<SaleItem, 'id'>[]>([]);
+
+  // AI OCR and Voice-to-Text Parsing states
+  const [useAI, setUseAI] = useState(false);
+  const [voiceText, setVoiceText] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSuccessMsg, setAiSuccessMsg] = useState<string | null>(null);
+
+  const recognitionRef = useRef<any>(null);
+
+  // Manage voice listening
+  const handleToggleListening = () => {
+    if (isListening) {
+      setIsListening(false);
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    } else {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        setAiError("Seu navegador não oferece suporte nativo para reconhecimento de voz. Por favor, digite a descrição textualmente.");
+        return;
+      }
+
+      setIsListening(true);
+      const rec = new SpeechRecognition();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'pt-BR';
+
+      rec.onresult = (event: any) => {
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        setVoiceText((prev) => prev ? prev + ' ' + transcript : transcript);
+      };
+
+      rec.onerror = (e: any) => {
+        console.error("Erro de voz:", e);
+        setIsListening(false);
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = rec;
+      rec.start();
+    }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setUploadedImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUploadedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleProcessWithAI = async () => {
+    if (!voiceText && !uploadedImage) return;
+
+    setIsAnalyzing(true);
+    setAiError(null);
+    setAiSuccessMsg(null);
+
+    try {
+      const response = await fetch("/api/gemini/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image: uploadedImage,
+          text: voiceText,
+          availableProducts: MAGNUS_PRODUCTS
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || "Erro desconhecido ao processar dados com Inteligência Comercial.");
+      }
+
+      const extracted = result.data;
+      
+      // 1. Match the client
+      if (extracted.clientName) {
+        const matchedClient = clients.find(c => 
+          c.name.toLowerCase().includes(extracted.clientName.toLowerCase()) ||
+          extracted.clientName.toLowerCase().includes(c.name.toLowerCase())
+        );
+        if (matchedClient) {
+          setSelectedClientId(matchedClient.id);
+        } else {
+          setAiError(`Cliente "${extracted.clientName}" detectado, mas não encontrado no seu cadastro local. Selecione manualmente.`);
+        }
+      }
+
+      // 2. Set date if found
+      if (extracted.date) {
+        setSaleDate(extracted.date);
+      }
+
+      // 3. Set notes if found
+      if (extracted.notes) {
+        setSaleNotes(extracted.notes);
+      }
+
+      // 4. Fill items
+      if (extracted.items && extracted.items.length > 0) {
+        const formattedItems = extracted.items.map((item: any) => {
+          // Look up estimated prices in Magnus Product Templates for default cost if not set
+          const template = MAGNUS_PRODUCTS.find(p => 
+            p.name.toLowerCase().includes(item.productName.toLowerCase()) ||
+            item.productName.toLowerCase().includes(p.name.toLowerCase())
+          );
+
+          const costPrice = item.unitCostPrice || template?.estimatedCostPrice || 0;
+          const salePrice = item.unitSalePrice || template?.estimatedSalePrice || 0;
+
+          return {
+            productName: template?.name || item.productName,
+            isMagnus: item.isMagnus ?? true,
+            weightKg: item.weightKg || template?.weightKg || 15,
+            quantity: item.quantity || 1,
+            unitCostPrice: costPrice,
+            unitSalePrice: salePrice
+          };
+        });
+
+        setCurrentItems(formattedItems);
+        setAiSuccessMsg(`Sucesso! Foram faturados e importados ${formattedItems.length} produtos para o pedido.`);
+      } else {
+        setAiError("A Inteligência Artificial concluiu a leitura, mas nenhum produto foi identificado.");
+      }
+
+    } catch (err: any) {
+      console.error(err);
+      setAiError(err.message || "Erro desconhecido de comunicação com a API do Gemini.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
 
   // Item builder state
   const [productSearch, setProductSearch] = useState('');
@@ -235,10 +410,183 @@ export default function Sales({
         <div className="lg:col-span-2 space-y-6">
           {activeTab === 'new' ? (
             <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden animate-fade-in">
-              <div className="p-5 border-b border-slate-100 bg-slate-50/50">
-                <h3 className="font-semibold text-slate-800">Nova Venda</h3>
-                <p className="text-xs text-slate-500">Monte o carrinho com o cliente e calcule seus lucros automaticamente</p>
+              <div className="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div>
+                  <h3 className="font-semibold text-slate-800">Nova Venda</h3>
+                  <p className="text-xs text-slate-500">Monte o carrinho com o cliente e calcule seus lucros automaticamente</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setUseAI(!useAI)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                    useAI 
+                      ? 'bg-purple-100 text-purple-700 border border-purple-200' 
+                      : 'bg-emerald-50 text-emerald-800 border border-emerald-100 hover:bg-emerald-100'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-purple-650" />
+                  {useAI ? 'Desativar Lançamento Rápido' : 'Lançar por Print ou Voz (IA)'}
+                </button>
               </div>
+
+              {useAI && (
+                <div className="p-5 bg-gradient-to-r from-purple-50/45 to-emerald-50/15 border-b border-slate-150 rounded-b-none space-y-4">
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-purple-600 animate-pulse" />
+                    <h4 className="font-bold text-xs text-purple-800 uppercase tracking-wider">Lançamento Inteligente por IA</h4>
+                    <span className="text-[9px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded font-mono font-bold">GEMINI 3.5 FLASH</span>
+                  </div>
+                  <p className="text-xs text-slate-650">
+                    Otimize seu faturamento ao máximo! Em vez de digitar linha por linha, você pode <strong>arrastar e soltar um print</strong> do seu aplicativo Magnus, <strong>gravar seu áudio</strong> descrevendo o pedido, ou <strong>digitar o texto</strong>.
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Voice / Text Prompt Box */}
+                    <div className="space-y-2">
+                      <label className="block text-[11px] font-semibold text-purple-900 uppercase tracking-wider">Descrever por Voz ou Texto</label>
+                      <div className="relative">
+                        <textarea
+                          rows={4}
+                          value={voiceText}
+                          onChange={(e) => setVoiceText(e.target.value)}
+                          placeholder="Fale ou digite, Ex: 'O cliente Agropecuária Vale Verde comprou 10 sacos de Magnus Adultos Carne 15kg e 6 de Salmão Castrados 15kg. Prazo de entrega de 3 dias e pagar em 30 d.'"
+                          className="w-full pl-3 pr-10 py-2 border border-purple-100 focus:border-purple-400 focus:ring-1 focus:ring-purple-200 rounded-lg text-xs bg-white text-slate-750 focus:outline-hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleToggleListening}
+                          className={`absolute right-2.5 bottom-2.5 p-2 rounded-full transition-all cursor-pointer ${
+                            isListening 
+                              ? 'bg-rose-500 text-white animate-bounce shadow-md hover:bg-rose-600' 
+                              : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                          }`}
+                          title={isListening ? "Parar de gravar" : "Gravar áudio da sua voz"}
+                        >
+                          <Mic className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {isListening && (
+                        <p className="text-[10px] text-rose-500 animate-pulse flex items-center gap-1 font-medium bg-rose-50 p-1.5 rounded border border-rose-100">
+                          <span className="w-2 h-2 rounded-full bg-rose-500 inline-block animate-ping" />
+                          Gravando por voz... fale agora as quantidades, produtos e cliente! Clique no microfone para parar.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Image Print Box */}
+                    <div className="space-y-2 select-none">
+                      <label className="block text-[11px] font-semibold text-purple-900 uppercase tracking-wider">Enviar Print do App Magnus</label>
+                      
+                      <div
+                        onDragEnter={handleDrag}
+                        onDragLeave={handleDrag}
+                        onDragOver={handleDrag}
+                        onDrop={handleDrop}
+                        className={`border-2 border-dashed rounded-lg p-4 text-center transition-all flex flex-col justify-center items-center h-32 cursor-pointer touch-action-pan-y select-none ${
+                          dragActive 
+                            ? "border-purple-600 bg-purple-50" 
+                            : uploadedImage 
+                              ? "border-emerald-300 bg-emerald-50/10" 
+                              : "border-slate-200 hover:border-purple-400 bg-white"
+                        }`}
+                        onClick={() => document.getElementById("ai-image-upload")?.click()}
+                      >
+                        <input
+                          id="ai-image-upload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleImageUpload}
+                        />
+
+                        {uploadedImage ? (
+                          <div className="relative w-full h-full flex items-center justify-center select-none">
+                            <img 
+                              src={uploadedImage} 
+                              alt="Print faturamento" 
+                              className="max-h-24 rounded object-contain border border-slate-100 select-none pointer-events-none" 
+                              draggable="false"
+                              onDragStart={(e) => e.preventDefault()}
+                            />
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setUploadedImage(null);
+                              }}
+                              className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white p-1 rounded-full hover:bg-rose-600 shadow-xs z-10 cursor-pointer"
+                              title="Remover imagem"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="space-y-1 select-none pointer-events-none">
+                            <Image className="w-6 h-6 text-slate-400 mx-auto" />
+                            <p className="text-[11px] text-slate-500 font-medium">Toque para escolher Print ou arraste a imagem</p>
+                            <p className="text-[9px] text-slate-400">Fotos de tela de faturamento ou comprovantes</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {aiError && (
+                    <div className="p-3 bg-rose-50 text-rose-800 text-xs rounded-lg border border-rose-100 flex items-start gap-1.5">
+                      <AlertCircle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold">Nota ou Alerta do Processamento:</p>
+                        <p className="text-[11px] text-rose-700 leading-relaxed">{aiError}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {aiSuccessMsg && (
+                    <div className="p-3 bg-emerald-50 text-emerald-950 text-xs rounded-lg border border-emerald-150 flex items-start gap-1.5">
+                      <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-semibold text-emerald-900">Sucesso no Processamento AI!</p>
+                        <p className="text-[11px] text-emerald-700 leading-relaxed">{aiSuccessMsg}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    {(voiceText || uploadedImage) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVoiceText('');
+                          setUploadedImage(null);
+                          setAiError(null);
+                          setAiSuccessMsg(null);
+                        }}
+                        className="px-3 py-1.5 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-lg text-xs font-semibold cursor-pointer"
+                      >
+                        Limpar Dados
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleProcessWithAI}
+                      disabled={isAnalyzing || (!voiceText && !uploadedImage)}
+                      className="px-4 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Lendo com IA Inteligente...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 text-purple-100" />
+                          <span>Processar e Lançar Venda</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleSubmitSale} className="p-5 space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -402,8 +750,8 @@ export default function Sales({
                       Nenhum produto adicionado ao pedido ainda. Use o painel acima para adicionar.
                     </div>
                   ) : (
-                    <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
-                      <table className="w-full text-left border-collapse text-xs">
+                    <div className="border border-slate-200 rounded-xl overflow-x-auto bg-white">
+                      <table className="w-full min-w-[620px] text-left border-collapse text-xs">
                         <thead>
                           <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 font-semibold uppercase tracking-wider">
                             <th className="p-3">Produto</th>
