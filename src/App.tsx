@@ -172,7 +172,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* MAIN VIEWPORT CANVAS */}
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl mx-auto w-full">
+      <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-7xl mx-auto w-full mobile-smooth-scroll">
         <AnimatePresence mode="wait">
           <motion.div
             key={activeTab}

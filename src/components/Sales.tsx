@@ -32,6 +32,7 @@ export default function Sales({
   const [saleDate, setSaleDate] = useState(new Date().toISOString().split('T')[0]);
   const [saleNotes, setSaleNotes] = useState('');
   const [currentItems, setCurrentItems] = useState<Omit<SaleItem, 'id'>[]>([]);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // AI OCR and Voice-to-Text Parsing states
   const [useAI, setUseAI] = useState(false);
@@ -301,11 +302,21 @@ export default function Sales({
   // Submit Sale
   const handleSubmitSale = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClientId) return alert('Selecione um cliente cadastrado.');
-    if (currentItems.length === 0) return alert('Adicione pelo menos um item à venda.');
+    setFormError(null);
+    if (!selectedClientId) {
+      setFormError('Selecione um cliente cadastrado.');
+      return;
+    }
+    if (currentItems.length === 0) {
+      setFormError('Adicione pelo menos um item à venda.');
+      return;
+    }
 
     const client = clients.find(c => c.id === selectedClientId);
-    if (!client) return alert('Cliente não encontrado.');
+    if (!client) {
+      setFormError('Cliente não encontrado.');
+      return;
+    }
 
     const finalizedItems: SaleItem[] = currentItems.map((item, idx) => ({
       ...item,
@@ -328,6 +339,7 @@ export default function Sales({
     setSelectedClientId('');
     setSaleNotes('');
     setCurrentItems([]);
+    setFormError(null);
     setActiveTab('list');
   };
 
@@ -841,6 +853,16 @@ export default function Sales({
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-700 focus:outline-hidden focus:border-emerald-500 text-sm"
                   />
                 </div>
+
+                {formError && (
+                  <div className="p-3 bg-red-50 border border-red-100 text-red-950 text-xs rounded-lg flex items-start gap-1.5 animate-fade-in select-none">
+                    <AlertCircle className="w-4 h-4 text-red-650 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-red-900">Atenção no Preenchimento:</span>
+                      <p className="text-red-700 mt-0.5">{formError}</p>
+                    </div>
+                  </div>
+                )}
 
                 {/* Form Buttons */}
                 <div className="flex justify-end gap-3 pt-2">

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Client, Visit, Sale } from '../types';
-import { Calendar, Clock, Plus, Sliders, CheckCircle2, XCircle, Trash2, HelpCircle, ArrowRight, UserCheck, MessageSquare } from 'lucide-react';
+import { Calendar, Clock, Plus, Sliders, CheckCircle2, XCircle, Trash2, HelpCircle, ArrowRight, UserCheck, MessageSquare, AlertCircle } from 'lucide-react';
 
 interface VisitsProps {
   clients: Client[];
@@ -34,6 +34,7 @@ export default function Visits({
   const [visitDate, setVisitDate] = useState(new Date().toISOString().split('T')[0]);
   const [visitTime, setVisitTime] = useState('09:00');
   const [visitPurpose, setVisitPurpose] = useState('');
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Selected visit for marking as done/logging feedback
   const [completingVisit, setCompletingVisit] = useState<Visit | null>(null);
@@ -42,11 +43,21 @@ export default function Visits({
   // Handle visit scheduling submit
   const handleSubmitVisit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedClientId) return alert('Por favor, selecione um cliente para agendar a visita.');
-    if (!visitPurpose.trim()) return alert('Insira o motivo ou objetivo da visita.');
+    setFormError(null);
+    if (!selectedClientId) {
+      setFormError('Por favor, selecione um cliente para agendar a visita.');
+      return;
+    }
+    if (!visitPurpose.trim()) {
+      setFormError('Insira o motivo ou objetivo da visita.');
+      return;
+    }
 
     const client = clients.find(c => c.id === selectedClientId);
-    if (!client) return alert('Cliente inválido.');
+    if (!client) {
+      setFormError('Cliente inválido.');
+      return;
+    }
 
     addVisit({
       clientId: selectedClientId,
@@ -60,6 +71,7 @@ export default function Visits({
     // Reset fields
     setSelectedClientId('');
     setVisitPurpose('');
+    setFormError(null);
     setActiveTab('agenda');
   };
 
@@ -80,12 +92,10 @@ export default function Visits({
 
   // Cancel Visit
   const handleCancelVisit = (visit: Visit) => {
-    if (confirm(`Deseja cancelar o agendamento de visita para ${visit.clientName}?`)) {
-      updateVisit({
-        ...visit,
-        status: 'canceled'
-      });
-    }
+    updateVisit({
+      ...visit,
+      status: 'canceled'
+    });
   };
 
   // Quick helper to fetch the previous sale of a client
@@ -194,6 +204,16 @@ export default function Visits({
                     className="w-full px-3 py-2 border border-slate-200 rounded-lg text-slate-700 text-sm focus:outline-hidden focus:border-emerald-500"
                   />
                 </div>
+
+                {formError && (
+                  <div className="p-3 bg-red-50 border border-red-100 text-red-950 text-xs rounded-lg flex items-start gap-1.5 animate-fade-in select-none">
+                    <AlertCircle className="w-4 h-4 text-red-650 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-semibold text-red-900">Atenção no Preenchimento:</span>
+                      <p className="text-red-700 mt-0.5">{formError}</p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex justify-end gap-3 pt-3">
                   <button

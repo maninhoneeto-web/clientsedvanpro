@@ -168,8 +168,8 @@ export default function Dashboard({
           />
         </div>
 
-        {/* Ambient background glows */}
-        <div className="absolute right-0 bottom-0 top-0 w-1/3 bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none" />
+        {/* Ambient background glows - hidden on mobile to prevent slow GPU compositing/ghosting glitches */}
+        <div className="hidden md:block absolute right-0 bottom-0 top-0 w-1/3 bg-emerald-500/10 blur-[100px] rounded-full pointer-events-none" />
       </div>
 
       {importStatus.type !== 'idle' && (

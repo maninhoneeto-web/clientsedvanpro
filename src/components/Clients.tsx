@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Client, Sale, Visit } from '../types';
 import { 
   Plus, Search, MapPin, User, MessageSquare, History, 
-  Calendar, ShoppingBag, Trash2, Edit2, ChevronRight, X, PhoneCall, TrendingUp, Share2
+  Calendar, ShoppingBag, Trash2, Edit2, ChevronRight, X, PhoneCall, TrendingUp, Share2, AlertCircle
 } from 'lucide-react';
 
 interface ClientsProps {
@@ -28,6 +28,8 @@ export default function Clients({
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [whatsappError, setWhatsappError] = useState<string | null>(null);
   
   // Search state
   const [searchText, setSearchText] = useState('');
@@ -45,6 +47,7 @@ export default function Clients({
     setOwnerName('');
     setPhone('');
     setCity('');
+    setFormError(null);
     setEditingClient(null);
     setShowAddModal(true);
   };
@@ -55,6 +58,7 @@ export default function Clients({
     setOwnerName(client.owner);
     setPhone(client.phone);
     setCity(client.city);
+    setFormError(null);
     setEditingClient(client);
     setShowAddModal(true);
   };
@@ -62,7 +66,11 @@ export default function Clients({
   // Submit client (add or edit)
   const handleSubmitClient = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!clientName.trim() || !city.trim()) return alert('Preencha os campos obrigatórios (Nome e Cidade)');
+    setFormError(null);
+    if (!clientName.trim() || !city.trim()) {
+      setFormError('Preencha os campos obrigatórios (Nome e Cidade)');
+      return;
+    }
 
     // clean digits or normalize phone if users add custom spacing
     let formattedPhone = phone.trim();
@@ -92,6 +100,7 @@ export default function Clients({
     setOwnerName('');
     setPhone('');
     setCity('');
+    setFormError(null);
     setEditingClient(null);
   };
 
@@ -141,9 +150,10 @@ export default function Clients({
 
   // Fast WhatsApp link sender helper
   const handleLaunchWhatsAppChat = (client: Client, messageText = '') => {
-    const sanitized = client.phone.replace(/\D/g, '');
+    const sanitized = client.phone.trim().replace(/\D/g, '');
     if (!sanitized) {
-      alert('Número do WhatsApp não cadastrado ou inválido.');
+      setWhatsappError(`Número do WhatsApp não cadastrado ou inválido para o cliente ${client.name}.`);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
     const textParam = messageText ? `&text=${encodeURIComponent(messageText)}` : '';
@@ -165,6 +175,22 @@ export default function Clients({
           <Plus className="w-4 h-4" /> Cadastrar Cliente
         </button>
       </div>
+
+      {whatsappError && (
+        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-950 text-xs rounded-lg flex items-center justify-between gap-1.5 animate-fade-in select-none">
+          <div className="flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4 text-rose-650 shrink-0" />
+            <span>{whatsappError}</span>
+          </div>
+          <button 
+            type="button" 
+            onClick={() => setWhatsappError(null)} 
+            className="text-rose-500 hover:text-rose-700 font-bold px-2 py-0.5 rounded-lg text-xs"
+          >
+            Fecar
+          </button>
+        </div>
+      )}
 
       {/* Main Content Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -484,6 +510,16 @@ export default function Clients({
                 />
                 <p className="text-[10px] text-slate-400 mt-1">Coloque apenas números com DDD. Será usado para enviar os comprovantes das rações vendidas.</p>
               </div>
+
+              {formError && (
+                <div className="p-3 bg-rose-50 border border-rose-100 text-rose-950 text-xs rounded-lg flex items-start gap-1.5 animate-fade-in select-none">
+                  <AlertCircle className="w-4 h-4 text-rose-650 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-semibold text-rose-900 font-sans">Atenção no Preenchimento:</span>
+                    <p className="text-rose-700 font-sans mt-0.5">{formError}</p>
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
